@@ -1,0 +1,16 @@
+APK oluşturma notu
+===================
+
+Bu ortamda Android SDK/Gradle kurulu olmadığı için APK doğrudan burada derlenemedi.
+Bu ZIP içine GitHub Actions ile otomatik APK oluşturma dosyası eklendi:
+
+.github/workflows/android-apk.yml
+
+Kullanım:
+1) Bu klasörü GitHub'a repo olarak yükleyin.
+2) GitHub repo sayfasında Actions sekmesine girin.
+3) Android APK Build iş akışını çalıştırın.
+4) İş bitince Artifacts kısmından TakimDolabiApp-debug-apk dosyasını indirin.
+5) İçindeki app-debug.apk dosyasını telefona veya Appetize.io gibi tarayıcı emülatörüne yükleyebilirsiniz.
+
+Not: Bu APK debug/test APK'sıdır. Resmi Play Store yayını için release imzalama gerekir.
