@@ -13,12 +13,18 @@ android {
         applicationId = "com.aybek.takimdolabi"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
+        versionCode = 1
         versionName = "1.1"
     }
 
-    buildFeatures { compose = true }
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.15" }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
 }
 
 dependencies {
