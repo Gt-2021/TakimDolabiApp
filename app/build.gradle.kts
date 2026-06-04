@@ -13,8 +13,12 @@ android {
         applicationId = "com.aybek.takimdolabi"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
+    }
+
+    buildFeatures {
+        compose = true
     }
 
     compileOptions {
@@ -45,12 +49,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
-    // QR / barkod okuma için kamera ve ML Kit. Uygulama içinde internet izni yoktur.
     implementation("androidx.camera:camera-camera2:1.4.0")
     implementation("androidx.camera:camera-lifecycle:1.4.0")
     implementation("androidx.camera:camera-view:1.4.0")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
-    // Fotoğraf seçme ve AsyncImage gösterimi için.
     implementation("io.coil-kt:coil-compose:2.7.0")
 }

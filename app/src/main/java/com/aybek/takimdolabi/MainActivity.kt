@@ -15,24 +15,65 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.room.*
+import androidx.room.Dao
+import androidx.room.Database
+import androidx.room.Delete
+import androidx.room.Entity
+import androidx.room.Insert
+import androidx.room.PrimaryKey
+import androidx.room.Query
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.room.Update
 import coil.compose.AsyncImage
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
@@ -45,13 +86,12 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.Executors
 
-// -------------------- VERİ TABANI MODELLERİ --------------------
 @Entity(tableName = "users")
 data class AppUser(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val username: String,
     val password: String,
-    val role: String // ADMIN veya OPERATOR
+    val role: String
 )
 
 @Entity(tableName = "tools")
@@ -72,9 +112,12 @@ data class ToolMovement(
     val toolCode: String,
     val toolName: String,
     val username: String,
-    val action: String, // ALDI veya IADE
+    val action: String,
     val quantity: Int,
-    val dateTime: String
+    val dateTime: String,
+    val deliveryMode: String = "",
+    val deliveredBy: String = "",
+    val recipientName: String = ""
 )
 
 @Dao
@@ -119,7 +162,7 @@ interface AppDao {
     suspend fun allMovements(): List<ToolMovement>
 }
 
-@Database(entities = [AppUser::class, ToolItem::class, ToolMovement::class], version = 2)
+@Database(entities = [AppUser::class, ToolItem::class, ToolMovement::class], version = 3)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun dao(): AppDao
 }
@@ -145,9 +188,9 @@ fun TakimDolabiApp(dao: AppDao) {
         if (dao.userCount() == 0) {
             dao.insertUser(AppUser(username = "admin", password = "1234", role = "ADMIN"))
             dao.insertUser(AppUser(username = "operator", password = "1234", role = "OPERATOR"))
-            dao.insertTool(ToolItem(code = "T-001", name = "Freze Takımı Ø8", stock = 10, criticalLevel = 3, barcode = "869000001"))
-            dao.insertTool(ToolItem(code = "T-002", name = "Matkap Ø5", stock = 8, criticalLevel = 2, barcode = "869000002"))
-            dao.insertTool(ToolItem(code = "T-003", name = "Kılavuz M6", stock = 5, criticalLevel = 2, barcode = "869000003"))
+            dao.insertTool(ToolItem(code = "T-001", name = "Freze Takımı Ø8", stock = 10, criticalLevel = 3))
+            dao.insertTool(ToolItem(code = "T-002", name = "Matkap Ø5", stock = 8, criticalLevel = 2))
+            dao.insertTool(ToolItem(code = "T-003", name = "Kılavuz M6", stock = 5, criticalLevel = 2))
         }
     }
 
@@ -170,18 +213,29 @@ fun LoginScreen(onLogin: (String, String) -> Unit) {
     var password by remember { mutableStateOf("") }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("AYBEK HAVACILIK", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineMedium)
-        Text("Takım Dolabı Kayıt Programı", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(24.dp))
+        Image(
+            painter = painterResource(id = R.drawable.aybek_logo),
+            contentDescription = "Aybek Havacılık",
+            modifier = Modifier.fillMaxWidth().height(120.dp),
+            contentScale = ContentScale.Fit
+        )
+        Spacer(Modifier.height(16.dp))
+        Text("Takım Dolabı Kayıt Programı", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(20.dp))
         OutlinedTextField(username, { username = it }, label = { Text("Kullanıcı adı") }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
-            password, { password = it }, label = { Text("Şifre") },
-            visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth()
+            password,
+            { password = it },
+            label = { Text("Şifre") },
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(16.dp))
         Button(onClick = { onLogin(username, password) }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
@@ -201,6 +255,7 @@ fun MainScreen(dao: AppDao, user: AppUser, onLogout: () -> Unit) {
     var movements by remember { mutableStateOf<List<ToolMovement>>(emptyList()) }
     var users by remember { mutableStateOf<List<AppUser>>(emptyList()) }
     var scannerAction by remember { mutableStateOf<String?>(null) }
+    var pendingScannedTool by remember { mutableStateOf<ToolItem?>(null) }
     var message by remember { mutableStateOf("") }
 
     fun refresh() {
@@ -210,6 +265,7 @@ fun MainScreen(dao: AppDao, user: AppUser, onLogout: () -> Unit) {
             users = dao.users()
         }
     }
+
     LaunchedEffect(Unit) { refresh() }
 
     if (scannerAction != null) {
@@ -219,12 +275,16 @@ fun MainScreen(dao: AppDao, user: AppUser, onLogout: () -> Unit) {
                     val tool = dao.toolByCodeOrBarcode(scanned.trim())
                     if (tool == null) {
                         message = "Okutulan barkod/QR için takım bulunamadı: $scanned"
+                        scannerAction = null
+                    } else if (scannerAction == "ALDI") {
+                        pendingScannedTool = tool
+                        scannerAction = null
                     } else {
-                        makeMovement(dao, user, tool, scannerAction!!)
-                        message = "${tool.code} - ${tool.name} için ${scannerAction!!} işlemi yapıldı."
+                        makeReturnMovement(dao, user, tool)
+                        message = "${tool.code} - ${tool.name} için İADE işlemi yapıldı."
+                        scannerAction = null
                         refresh()
                     }
-                    scannerAction = null
                 }
             },
             onClose = { scannerAction = null }
@@ -232,15 +292,44 @@ fun MainScreen(dao: AppDao, user: AppUser, onLogout: () -> Unit) {
         return
     }
 
+    pendingScannedTool?.let { tool ->
+        IssueMovementDialog(
+            tool = tool,
+            currentUser = user,
+            users = users,
+            onDismiss = { pendingScannedTool = null },
+            onConfirm = { mode, recipient ->
+                scope.launch {
+                    makeTakeMovement(dao, user, tool, mode, recipient)
+                    message = "${tool.code} - ${tool.name} için ALDI işlemi yapıldı."
+                    pendingScannedTool = null
+                    refresh()
+                }
+            }
+        )
+    }
+
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.weight(1f)) {
-                Text("Takım Dolabı", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                Text("Kullanıcı: ${user.username} / Yetki: ${user.role}")
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Image(
+                    painter = painterResource(id = R.drawable.aybek_logo),
+                    contentDescription = "Aybek Havacılık",
+                    modifier = Modifier.size(64.dp),
+                    contentScale = ContentScale.Fit
+                )
+                Spacer(Modifier.width(8.dp))
+                Column {
+                    Text("Takım Dolabı", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                    Text("Kullanıcı: ${user.username} / Yetki: ${user.role}")
+                }
             }
             OutlinedButton(onClick = onLogout) { Text("Çıkış") }
         }
-        if (message.isNotBlank()) Text(message, color = Color(0xFF1565C0), fontWeight = FontWeight.Bold)
+        if (message.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(message, color = Color(0xFF1565C0), fontWeight = FontWeight.Bold)
+        }
         Spacer(Modifier.height(8.dp))
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -252,7 +341,7 @@ fun MainScreen(dao: AppDao, user: AppUser, onLogout: () -> Unit) {
         Spacer(Modifier.height(8.dp))
 
         when (selectedTab) {
-            0 -> StockScreen(dao, user, tools, onChanged = { refresh() }, onScan = { scannerAction = it })
+            0 -> StockScreen(dao, user, tools, users, onChanged = { refresh() }, onScan = { scannerAction = it })
             1 -> MovementScreen(movements)
             2 -> AdminScreen(dao, users, currentUser = user, onChanged = { refresh() })
             3 -> ReportScreen(tools, movements, onExport = {
@@ -266,9 +355,32 @@ fun MainScreen(dao: AppDao, user: AppUser, onLogout: () -> Unit) {
 }
 
 @Composable
-fun StockScreen(dao: AppDao, user: AppUser, tools: List<ToolItem>, onChanged: () -> Unit, onScan: (String) -> Unit) {
-    val scope = rememberCoroutineScope()
+fun StockScreen(
+    dao: AppDao,
+    user: AppUser,
+    tools: List<ToolItem>,
+    users: List<AppUser>,
+    onChanged: () -> Unit,
+    onScan: (String) -> Unit
+) {
     var showAddTool by remember { mutableStateOf(false) }
+    var editTool by remember { mutableStateOf<ToolItem?>(null) }
+
+    if (showAddTool) {
+        AddToolDialog(
+            dao = dao,
+            editTool = editTool,
+            onDismiss = {
+                showAddTool = false
+                editTool = null
+            },
+            onChanged = {
+                showAddTool = false
+                editTool = null
+                onChanged()
+            }
+        )
+    }
 
     Column {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -277,24 +389,58 @@ fun StockScreen(dao: AppDao, user: AppUser, tools: List<ToolItem>, onChanged: ()
         }
         Spacer(Modifier.height(8.dp))
         if (user.role == "ADMIN") {
-            Button(onClick = { showAddTool = !showAddTool }, modifier = Modifier.fillMaxWidth()) { Text("+ Yeni Takım Ekle / Düzenle") }
-            if (showAddTool) AddToolForm(dao, null, onChanged)
+            Button(onClick = { editTool = null; showAddTool = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("+ Yeni Takım Ekle")
+            }
             Spacer(Modifier.height(8.dp))
         }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(tools) { tool ->
-                ToolCard(dao, user, tool, onChanged)
+                ToolCard(
+                    dao = dao,
+                    user = user,
+                    users = users,
+                    tool = tool,
+                    onChanged = onChanged,
+                    onEdit = {
+                        editTool = tool
+                        showAddTool = true
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-fun ToolCard(dao: AppDao, user: AppUser, tool: ToolItem, onChanged: () -> Unit) {
+fun ToolCard(
+    dao: AppDao,
+    user: AppUser,
+    users: List<AppUser>,
+    tool: ToolItem,
+    onChanged: () -> Unit,
+    onEdit: () -> Unit
+) {
     val scope = rememberCoroutineScope()
-    var editMode by remember { mutableStateOf(false) }
     val critical = tool.stock <= tool.criticalLevel
+    var showIssueDialog by remember { mutableStateOf(false) }
+
+    if (showIssueDialog) {
+        IssueMovementDialog(
+            tool = tool,
+            currentUser = user,
+            users = users,
+            onDismiss = { showIssueDialog = false },
+            onConfirm = { mode, recipient ->
+                scope.launch {
+                    makeTakeMovement(dao, user, tool, mode, recipient)
+                    showIssueDialog = false
+                    onChanged()
+                }
+            }
+        )
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -303,7 +449,11 @@ fun ToolCard(dao: AppDao, user: AppUser, tool: ToolItem, onChanged: () -> Unit) 
         Column(Modifier.padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 if (tool.photoUri.isNotBlank()) {
-                    AsyncImage(model = Uri.parse(tool.photoUri), contentDescription = "Takım Fotoğrafı", modifier = Modifier.size(72.dp).background(Color.White))
+                    AsyncImage(
+                        model = Uri.parse(tool.photoUri),
+                        contentDescription = "Takım Fotoğrafı",
+                        modifier = Modifier.size(72.dp).background(Color.White)
+                    )
                     Spacer(Modifier.width(10.dp))
                 }
                 Column(Modifier.weight(1f)) {
@@ -317,32 +467,28 @@ fun ToolCard(dao: AppDao, user: AppUser, tool: ToolItem, onChanged: () -> Unit) 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     enabled = tool.stock > 0,
-                    onClick = {
-                        scope.launch {
-                            makeMovement(dao, user, tool, "ALDI")
-                            onChanged()
-                        }
-                    },
+                    onClick = { showIssueDialog = true },
                     modifier = Modifier.weight(1f)
                 ) { Text("TAKIM AL") }
                 Button(
                     onClick = {
                         scope.launch {
-                            makeMovement(dao, user, tool, "İADE")
+                            makeReturnMovement(dao, user, tool)
                             onChanged()
                         }
                     },
                     modifier = Modifier.weight(1f)
                 ) { Text("İADE ET") }
-                if (user.role == "ADMIN") OutlinedButton(onClick = { editMode = !editMode }) { Text("Düzenle") }
+                if (user.role == "ADMIN") {
+                    OutlinedButton(onClick = onEdit) { Text("Düzenle") }
+                }
             }
-            if (editMode && user.role == "ADMIN") AddToolForm(dao, tool, onChanged = { editMode = false; onChanged() })
         }
     }
 }
 
 @Composable
-fun AddToolForm(dao: AppDao, editTool: ToolItem?, onChanged: () -> Unit) {
+fun AddToolDialog(dao: AppDao, editTool: ToolItem?, onDismiss: () -> Unit, onChanged: () -> Unit) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var code by remember { mutableStateOf(editTool?.code ?: "") }
@@ -352,10 +498,14 @@ fun AddToolForm(dao: AppDao, editTool: ToolItem?, onChanged: () -> Unit) {
     var barcode by remember { mutableStateOf(editTool?.barcode ?: "") }
     var photoUri by remember { mutableStateOf(editTool?.photoUri ?: "") }
     var scanForBarcode by remember { mutableStateOf(false) }
+    var errorText by remember { mutableStateOf("") }
 
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
-            try { context.contentResolver.takePersistableUriPermission(it, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            try {
+                context.contentResolver.takePersistableUriPermission(it, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (_: Exception) {
+            }
             photoUri = it.toString()
         }
     }
@@ -365,40 +515,164 @@ fun AddToolForm(dao: AppDao, editTool: ToolItem?, onChanged: () -> Unit) {
         return
     }
 
-    Card(Modifier.fillMaxWidth().padding(vertical = 8.dp), shape = RoundedCornerShape(12.dp)) {
-        Column(Modifier.padding(12.dp)) {
-            Text(if (editTool == null) "Yeni Takım Bilgisi" else "Takım Düzenleme", fontWeight = FontWeight.Bold)
-            OutlinedTextField(code, { code = it }, label = { Text("Takım kodu") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(name, { name = it }, label = { Text("Takım adı") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(stock, { stock = it }, label = { Text("Stok miktarı") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(critical, { critical = it }, label = { Text("Kritik seviye") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(barcode, { barcode = it }, label = { Text("Barkod / QR değeri") }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(onClick = { scanForBarcode = true }, modifier = Modifier.weight(1f)) { Text("Barkod Okut") }
-                OutlinedButton(onClick = { photoPicker.launch("image/*") }, modifier = Modifier.weight(1f)) { Text("Fotoğraf Seç") }
-            }
-            if (photoUri.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                AsyncImage(model = Uri.parse(photoUri), contentDescription = "Seçili Fotoğraf", modifier = Modifier.size(110.dp).background(Color.White))
-            }
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = {
-                scope.launch {
-                    val item = ToolItem(
-                        id = editTool?.id ?: 0,
-                        code = code.trim(),
-                        name = name.trim(),
-                        stock = stock.toIntOrNull() ?: 0,
-                        criticalLevel = critical.toIntOrNull() ?: 0,
-                        barcode = barcode.trim(),
-                        photoUri = photoUri
-                    )
-                    if (editTool == null) dao.insertTool(item) else dao.updateTool(item)
-                    code = ""; name = ""; stock = ""; critical = ""; barcode = ""; photoUri = ""
-                    onChanged()
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+            Scaffold(
+                bottomBar = {
+                    Surface(shadowElevation = 8.dp) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                            if (errorText.isNotBlank()) {
+                                Text(errorText, color = Color.Red, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(6.dp))
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("İPTAL") }
+                                Button(
+                                    onClick = {
+                                        val nameValue = name.trim()
+                                        if (nameValue.isBlank()) {
+                                            errorText = "Takım adı boş bırakılamaz."
+                                            return@Button
+                                        }
+                                        val generatedCode = if (code.trim().isBlank()) autoToolCode() else code.trim()
+                                        scope.launch {
+                                            val item = ToolItem(
+                                                id = editTool?.id ?: 0,
+                                                code = generatedCode,
+                                                name = nameValue,
+                                                stock = stock.toIntOrNull() ?: 0,
+                                                criticalLevel = critical.toIntOrNull() ?: 0,
+                                                barcode = barcode.trim(),
+                                                photoUri = photoUri
+                                            )
+                                            if (editTool == null) dao.insertTool(item) else dao.updateTool(item)
+                                            onChanged()
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(if (editTool == null) "KAYDET" else "GÜNCELLE")
+                                }
+                            }
+                        }
+                    }
                 }
-            }, modifier = Modifier.fillMaxWidth()) { Text(if (editTool == null) "KAYDET" else "GÜNCELLE") }
+            ) { innerPadding ->
+                Column(
+                    Modifier
+                        .padding(innerPadding)
+                        .padding(12.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(if (editTool == null) "Yeni Takım Bilgisi" else "Takım Düzenleme", fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        code,
+                        { code = it },
+                        label = { Text("Takım kodu (boşsa otomatik oluşturulur)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(name, { name = it }, label = { Text("Takım adı") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(stock, { stock = it }, label = { Text("Stok miktarı") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(critical, { critical = it }, label = { Text("Kritik seviye") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        barcode,
+                        { barcode = it },
+                        label = { Text("Barkod / QR değeri (isteğe bağlı)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { scanForBarcode = true }, modifier = Modifier.weight(1f)) { Text("Barkod Okut") }
+                        OutlinedButton(onClick = { photoPicker.launch("image/*") }, modifier = Modifier.weight(1f)) { Text("Fotoğraf Seç") }
+                    }
+                    Text("Not: Barkod ve fotoğraf girmek zorunlu değildir.", style = MaterialTheme.typography.bodySmall)
+                    if (photoUri.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        AsyncImage(
+                            model = Uri.parse(photoUri),
+                            contentDescription = "Seçili Fotoğraf",
+                            modifier = Modifier.size(110.dp).background(Color.White)
+                        )
+                        OutlinedButton(onClick = { photoUri = "" }) { Text("Fotoğrafı Kaldır") }
+                    }
+                    Spacer(Modifier.height(72.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun IssueMovementDialog(
+    tool: ToolItem,
+    currentUser: AppUser,
+    users: List<AppUser>,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit
+) {
+    var deliveryMode by remember { mutableStateOf("SELF") }
+    var recipientName by remember { mutableStateOf(currentUser.username) }
+    var errorText by remember { mutableStateOf("") }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Takım Alma Kaydı", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text("${tool.code} - ${tool.name}")
+                Spacer(Modifier.height(8.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = deliveryMode == "SELF", onClick = {
+                        deliveryMode = "SELF"
+                        recipientName = currentUser.username
+                    })
+                    Text("Kullanıcı kendi alıyor")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = deliveryMode == "DELIVERED", onClick = {
+                        deliveryMode = "DELIVERED"
+                        if (recipientName == currentUser.username) recipientName = ""
+                    })
+                    Text("Takımhane sorumlusu teslim ediyor")
+                }
+
+                if (deliveryMode == "DELIVERED") {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        recipientName,
+                        { recipientName = it },
+                        label = { Text("Teslim alan kişi") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text("Hızlı seçim:", fontWeight = FontWeight.SemiBold)
+                    users.forEach { u ->
+                        OutlinedButton(onClick = { recipientName = u.username }, modifier = Modifier.fillMaxWidth()) {
+                            Text(u.username)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    Text("Teslim eden: ${currentUser.username}", style = MaterialTheme.typography.bodySmall)
+                }
+
+                if (errorText.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(errorText, color = Color.Red, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("İPTAL") }
+                    Button(onClick = {
+                        if (deliveryMode == "DELIVERED" && recipientName.trim().isBlank()) {
+                            errorText = "Teslim alan kişi boş bırakılamaz."
+                        } else {
+                            val finalRecipient = if (deliveryMode == "SELF") currentUser.username else recipientName.trim()
+                            onConfirm(deliveryMode, finalRecipient)
+                        }
+                    }, modifier = Modifier.weight(1f)) { Text("ONAYLA") }
+                }
+            }
         }
     }
 }
@@ -411,6 +685,12 @@ fun MovementScreen(movements: List<ToolMovement>) {
                 Column(Modifier.padding(10.dp)) {
                     Text("${m.dateTime} - ${m.username}", fontWeight = FontWeight.Bold)
                     Text("${m.toolCode} ${m.toolName} / İşlem: ${m.action} / Miktar: ${m.quantity}")
+                    if (m.action == "ALDI") {
+                        val modeText = if (m.deliveryMode == "DELIVERED") "Takımhane sorumlusu teslim etti" else "Kullanıcı kendi aldı"
+                        Text("Teslim şekli: $modeText")
+                        if (m.deliveredBy.isNotBlank()) Text("Teslim eden: ${m.deliveredBy}")
+                        if (m.recipientName.isNotBlank()) Text("Teslim alan: ${m.recipientName}")
+                    }
                 }
             }
         }
@@ -447,11 +727,21 @@ fun AdminScreen(dao: AppDao, users: List<AppUser>, currentUser: AppUser, onChang
                     scope.launch {
                         val u = AppUser(id = editing?.id ?: 0, username = username.trim(), password = password.trim(), role = role)
                         if (editing == null) dao.insertUser(u) else dao.updateUser(u)
-                        editing = null; username = ""; password = ""; role = "OPERATOR"
+                        editing = null
+                        username = ""
+                        password = ""
+                        role = "OPERATOR"
                         onChanged()
                     }
                 }, modifier = Modifier.fillMaxWidth()) { Text(if (editing == null) "KULLANICI EKLE" else "KULLANICI GÜNCELLE") }
-                if (editing != null) OutlinedButton(onClick = { editing = null; username = ""; password = ""; role = "OPERATOR" }, modifier = Modifier.fillMaxWidth()) { Text("Vazgeç") }
+                if (editing != null) {
+                    OutlinedButton(onClick = {
+                        editing = null
+                        username = ""
+                        password = ""
+                        role = "OPERATOR"
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Vazgeç") }
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -490,8 +780,8 @@ fun ReportScreen(tools: List<ToolItem>, movements: List<ToolMovement>, onExport:
                 Text("Rapor Özeti", fontWeight = FontWeight.Bold)
                 Text("Toplam takım çeşidi: ${tools.size}")
                 Text("Kritik seviyedeki takım: ${criticalTools.size}")
-                Text("Son kayıtlarda alınan işlem: $outCount")
-                Text("Son kayıtlarda iade işlem: $returnCount")
+                Text("Toplam alınan işlem: $outCount")
+                Text("Toplam iade işlem: $returnCount")
             }
         }
         Text("Kritik Seviyedeki Takımlar", fontWeight = FontWeight.Bold)
@@ -514,11 +804,17 @@ fun ReportScreen(tools: List<ToolItem>, movements: List<ToolMovement>, onExport:
 fun QRScannerScreen(onResult: (String) -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var hasPermission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
+    var hasPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        )
+    }
     var manualText by remember { mutableStateOf("") }
     var handled by remember { mutableStateOf(false) }
 
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> hasPermission = granted }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        hasPermission = granted
+    }
 
     Column(Modifier.fillMaxSize().padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("QR / Barkod Okutma", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
@@ -526,7 +822,9 @@ fun QRScannerScreen(onResult: (String) -> Unit, onClose: () -> Unit) {
         Spacer(Modifier.height(8.dp))
 
         if (!hasPermission) {
-            Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }, modifier = Modifier.fillMaxWidth()) { Text("KAMERA İZNİ VER") }
+            Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }, modifier = Modifier.fillMaxWidth()) {
+                Text("KAMERA İZNİ VER")
+            }
         } else {
             AndroidView(
                 factory = { ctx ->
@@ -537,7 +835,9 @@ fun QRScannerScreen(onResult: (String) -> Unit, onClose: () -> Unit) {
                         val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
                         val scanner = BarcodeScanning.getClient()
                         val executor = Executors.newSingleThreadExecutor()
-                        val analysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
+                        val analysis = ImageAnalysis.Builder()
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                            .build()
                         analysis.setAnalyzer(executor) { imageProxy ->
                             val mediaImage = imageProxy.image
                             if (mediaImage != null && !handled) {
@@ -572,8 +872,8 @@ fun QRScannerScreen(onResult: (String) -> Unit, onClose: () -> Unit) {
     }
 }
 
-suspend fun makeMovement(dao: AppDao, user: AppUser, tool: ToolItem, action: String) {
-    val newStock = if (action == "ALDI") (tool.stock - 1).coerceAtLeast(0) else tool.stock + 1
+suspend fun makeTakeMovement(dao: AppDao, user: AppUser, tool: ToolItem, deliveryMode: String, recipientName: String) {
+    val newStock = (tool.stock - 1).coerceAtLeast(0)
     dao.updateTool(tool.copy(stock = newStock))
     dao.insertMovement(
         ToolMovement(
@@ -581,7 +881,26 @@ suspend fun makeMovement(dao: AppDao, user: AppUser, tool: ToolItem, action: Str
             toolCode = tool.code,
             toolName = tool.name,
             username = user.username,
-            action = action,
+            action = "ALDI",
+            quantity = 1,
+            dateTime = nowText(),
+            deliveryMode = deliveryMode,
+            deliveredBy = if (deliveryMode == "DELIVERED") user.username else "",
+            recipientName = recipientName
+        )
+    )
+}
+
+suspend fun makeReturnMovement(dao: AppDao, user: AppUser, tool: ToolItem) {
+    val newStock = tool.stock + 1
+    dao.updateTool(tool.copy(stock = newStock))
+    dao.insertMovement(
+        ToolMovement(
+            toolId = tool.id,
+            toolCode = tool.code,
+            toolName = tool.name,
+            username = user.username,
+            action = "İADE",
             quantity = 1,
             dateTime = nowText()
         )
@@ -604,9 +923,16 @@ suspend fun exportReportCsv(context: Context, tools: List<ToolItem>, movements: 
     }
     sb.appendLine()
     sb.appendLine("HAREKET KAYITLARI")
-    sb.appendLine("Tarih Saat;Kullanici;Takim Kodu;Takim Adi;Islem;Miktar")
+    sb.appendLine("Tarih Saat;Kullanici;Takim Kodu;Takim Adi;Islem;Miktar;Teslim Sekli;Teslim Eden;Teslim Alan")
     movements.forEach { m ->
-        sb.appendLine("${safeCsv(m.dateTime)};${safeCsv(m.username)};${safeCsv(m.toolCode)};${safeCsv(m.toolName)};${safeCsv(m.action)};${m.quantity}")
+        val modeText = when (m.deliveryMode) {
+            "DELIVERED" -> "Takımhane sorumlusu teslim etti"
+            "SELF" -> "Kullanıcı kendi aldı"
+            else -> ""
+        }
+        sb.appendLine(
+            "${safeCsv(m.dateTime)};${safeCsv(m.username)};${safeCsv(m.toolCode)};${safeCsv(m.toolName)};${safeCsv(m.action)};${m.quantity};${safeCsv(modeText)};${safeCsv(m.deliveredBy)};${safeCsv(m.recipientName)}"
+        )
     }
     file.writeText(sb.toString(), Charsets.UTF_8)
     file
@@ -614,3 +940,4 @@ suspend fun exportReportCsv(context: Context, tools: List<ToolItem>, movements: 
 
 fun safeCsv(text: String): String = text.replace(";", ",").replace("\n", " ").replace("\r", " ")
 fun nowText(): String = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("tr", "TR")).format(Date())
+fun autoToolCode(): String = "OTO-" + SimpleDateFormat("yyMMddHHmmss", Locale.US).format(Date())
